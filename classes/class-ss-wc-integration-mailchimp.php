@@ -27,49 +27,58 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 			include_once( 'api/class-MCAPI.php' );
 		}
 
-		$this->id					= 'mailchimp';
-		$this->method_title     	= __( 'MailChimp', 'ss_wc_mailchimp' );
-		$this->method_description	= __( 'MailChimp is a popular email marketing service.', 'ss_wc_mailchimp' );
+		$this->id                 = 'mailchimp';
+		$this->method_title       = __( 'MailChimp', 'ss_wc_mailchimp' );
+		$this->method_description = __( 'MailChimp is a popular email marketing service.', 'ss_wc_mailchimp' );
 
 		// Load the settings.
 		$this->init_settings();
 
 		// We need the API key to set up for the lists in the form fields
-		$this->api_key = $this->get_option( 'api_key' );
+		$this->api_key   = $this->get_option( 'api_key' );
 		$this->mailchimp = new MCAPI( $this->api_key );
-		$this->enabled = $this->get_option( 'enabled' );
+		$this->enabled   = $this->get_option( 'enabled' );
 
 		$this->init_form_fields();
 
 		// Get setting values
-		$this->occurs         = $this->get_option( 'occurs' );
-		$this->list           = $this->get_option( 'list' );
-		$this->double_optin   = $this->get_option( 'double_optin' );
-		$this->groups         = $this->get_option( 'groups' );
-		$this->display_opt_in = $this->get_option( 'display_opt_in' );
-		$this->opt_in_label   = $this->get_option( 'opt_in_label' );
-		$this->opt_in_checkbox_default_status = $this->get_option( 'opt_in_checkbox_default_status' );
+		$this->occurs                           = $this->get_option( 'occurs' );
+		$this->list                             = $this->get_option( 'list' );
+		$this->double_optin                     = $this->get_option( 'double_optin' );
+		$this->subscribe_new_user               = $this->get_option( 'subscribe_new_user', 'yes' );
+		$this->groups                           = $this->get_option( 'groups' );
+		$this->display_opt_in                   = $this->get_option( 'display_opt_in' );
+		$this->opt_in_label                     = $this->get_option( 'opt_in_label' );
+		$this->opt_in_checkbox_default_status   = $this->get_option( 'opt_in_checkbox_default_status' );
 		$this->opt_in_checkbox_display_location = $this->get_option( 'opt_in_checkbox_display_location' );
-		$this->interest_groupings = $this->get_option( 'interest_groupings' );
+		$this->interest_groupings               = $this->get_option( 'interest_groupings' );
 
 		// Hooks
-		add_action( 'admin_notices', array( &$this, 'checks' ) );
-		add_action( 'woocommerce_update_options_integration', array( $this, 'process_admin_options') );
+		add_action( 'admin_notices',                                       array( &$this, 'checks' ) );
+		add_action( 'woocommerce_update_options_integration',              array( $this, 'process_admin_options') );
 		add_action( 'woocommerce_update_options_integration_' . $this->id, array( $this, 'process_admin_options') );
 
-		// We would use the 'woocommerce_new_order' action but first name, last name and email address (order meta) is not yet available, 
+		// We would use the 'woocommerce_new_order' action but first name, last name and email address (order meta) is not yet available,
 		// so instead we use the 'woocommerce_checkout_update_order_meta' action hook which fires after the checkout process on the "thank you" page
-		add_action( 'woocommerce_checkout_update_order_meta', array( &$this, 'order_status_changed' ), 1000, 1 );
+		add_action( 'woocommerce_checkout_update_order_meta',  array( $this, 'order_status_changed' ), 1000, 1 );
 
 		// hook into woocommerce order status changed hook to handle the desired subscription event trigger
-		add_action( 'woocommerce_order_status_changed', array( &$this, 'order_status_changed' ), 10, 3 );
+		add_action( 'woocommerce_order_status_changed',        array( $this, 'order_status_changed' ), 10, 3 );
 
-		// Maybe add an "opt-in" field to the checkout
-		add_filter( 'woocommerce_checkout_fields', array( &$this, 'maybe_add_checkout_fields' ) );
-		add_filter( 'default_checkout_ss_wc_mailchimp_opt_in', array( &$this, 'checkbox_default_status' ) );
+		// Add "opt-in" field if needed (and save it)
+		if( 'yes' == $this->display_opt_in ) {
+			// Add an "opt-in" field to the checkout
+			add_filter( 'woocommerce_checkout_fields',             array( $this, 'add_checkout_fields' ) );
+			add_filter( 'default_checkout_ss_wc_mailchimp_opt_in', array( $this, 'checkbox_default_status' ) );
 
-		// Maybe save the "opt-in" field on the checkout
-		add_action( 'woocommerce_checkout_update_order_meta', array( &$this, 'maybe_save_checkout_fields' ) );
+			// Save the "opt-in" field on the checkout
+			add_action( 'woocommerce_checkout_update_order_meta',  array( $this, 'save_checkout_fields' ) );
+		}
+
+		// Subscribe new customer
+		if( 'yes' == $this->subscribe_new_user ) {
+			add_action( 'woocommerce_created_customer', array( $this, 'subscribe_new_customer' ), 10, 3 );
+		}
 	}
 
 	/**
@@ -98,7 +107,7 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 	 * @access public
 	 * @return void
 	 */
-	public function order_status_changed( $id, $status = 'new', $new_status = 'pending' ) { 
+	public function order_status_changed( $id, $status = 'new', $new_status = 'pending' ) {
 
 		if ( $this->is_valid() && $new_status == $this->occurs ) {
 
@@ -151,7 +160,7 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 		}
 		return false;
 	}
-	
+
 	/**
 	 * Initialize Settings Form Fields
 	 *
@@ -164,63 +173,68 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 
 			if ( $this->enabled && $this->has_api_key() ) {
 				$lists = $this->get_lists();
-	 			if ($lists === false ) {
-	 				$lists = array ();
-	 			}
-	 		}
- 			
- 			$mailchimp_lists = $this->has_api_key() ? array_merge( array( '' => __('Select a list...', 'ss_wc_mailchimp' ) ), $lists ) : array( '' => __( 'Enter your key and save to see your lists', 'ss_wc_mailchimp' ) );
+				if ($lists === false ) {
+					$lists = array ();
+				}
+			}
+
+			$mailchimp_lists = $this->has_api_key() ? array_merge( array( '' => __('Select a list...', 'ss_wc_mailchimp' ) ), $lists ) : array( '' => __( 'Enter your key and save to see your lists', 'ss_wc_mailchimp' ) );
 			//$mailchimp_interest_groupings = $this->has_list() ? array_merge( array( '' => __('Select an interest grouping...', 'ss_wc_mailchimp' ) ), $this->get_interest_groupings( $this->list ) ) : array( '' => __( 'Please select a list to see your interest groupings.', 'ss_wc_mailchimp' ) );
 
 			$this->form_fields = array(
 				'enabled' => array(
-								'title' => __( 'Enable/Disable', 'ss_wc_mailchimp' ),
-								'label' => __( 'Enable MailChimp', 'ss_wc_mailchimp' ),
-								'type' => 'checkbox',
+								'title'       => __( 'Enable/Disable', 'ss_wc_mailchimp' ),
+								'label'       => __( 'Enable MailChimp', 'ss_wc_mailchimp' ),
+								'type'        => 'checkbox',
 								'description' => '',
-								'default' => 'no'
+								'default'     => 'no'
 							),
 				'occurs' => array(
-								'title' => __( 'Subscribe Event', 'ss_wc_mailchimp' ),
-								'type' => 'select',
+								'title'       => __( 'Subscribe Event', 'ss_wc_mailchimp' ),
+								'type'        => 'select',
 								'description' => __( 'When should customers be subscribed to lists?', 'ss_wc_mailchimp' ),
-								'default' => 'pending',
-								'options' => array(
-									'pending' => __( 'Order Created', 'ss_wc_mailchimp' ),
+								'default'     => 'pending',
+								'options'     => array(
+									'pending'    => __( 'Order Created', 'ss_wc_mailchimp' ),
 									'completed'  => __( 'Order Completed', 'ss_wc_mailchimp' ),
 								),
 							),
+				'subscribe_new_user' => array(
+								'title'       => __( 'Subscribe New Registered Customers', 'ss_wc_mailchimp' ),
+								'type'        => 'checkbox',
+								'default'     => 'yes'
+							),
 				'api_key' => array(
-								'title' => __( 'API Key', 'ss_wc_mailchimp' ),
-								'type' => 'text',
+								'title'       => __( 'API Key', 'ss_wc_mailchimp' ),
+								'type'        => 'text',
 								'description' => __( '<a href="https://us2.admin.mailchimp.com/account/api/" target="_blank">Login to mailchimp</a> to look up your api key.', 'ss_wc_mailchimp' ),
-								'default' => ''
+								'default'     => ''
 							),
 				'list' => array(
-								'title' => __( 'Main List', 'ss_wc_mailchimp' ),
-								'type' => 'select',
+								'title'       => __( 'Main List', 'ss_wc_mailchimp' ),
+								'type'        => 'select',
 								'description' => __( 'All customers will be added to this list.', 'ss_wc_mailchimp' ),
-								'default' => '',
-								'options' => $mailchimp_lists,
+								'default'     => '',
+								'options'     => $mailchimp_lists,
 							),
 				'interest_groupings' => array(
-								'title' => __( 'Group Name', 'ss_wc_mailchimp' ),
-								'type' => 'text',
+								'title'       => __( 'Group Name', 'ss_wc_mailchimp' ),
+								'type'        => 'text',
 								'description' => __( 'Optional: Enter the name of the group. Learn more about <a href="http://mailchimp.com/features/groups" target="_blank">Groups</a>', 'ss_wc_mailchimp' ),
-								'default' => '',
+								'default'     => '',
 							),
 				'groups' => array(
-								'title' => __( 'Groups', 'ss_wc_mailchimp' ),
-								'type' => 'text',
+								'title'       => __( 'Groups', 'ss_wc_mailchimp' ),
+								'type'        => 'text',
 								'description' => __( 'Optional: Comma separated list of interest groups to which subscribers should be added.', 'ss_wc_mailchimp' ),
-								'default' => '',
+								'default'     => '',
 							),
 				'double_optin' => array(
-								'title' => __( 'Double Opt-In', 'ss_wc_mailchimp' ),
-								'label' => __( 'Enable Double Opt-In', 'ss_wc_mailchimp' ),
-								'type' => 'checkbox',
+								'title'       => __( 'Double Opt-In', 'ss_wc_mailchimp' ),
+								'label'       => __( 'Enable Double Opt-In', 'ss_wc_mailchimp' ),
+								'type'        => 'checkbox',
 								'description' => __( 'If enabled, customers will receive an email prompting them to confirm their subscription to the list above.', 'ss_wc_mailchimp' ),
-								'default' => 'no'
+								'default'     => 'no'
 							),
 				'display_opt_in' => array(
 								'title'       => __( 'Display Opt-In Field', 'ss_wc_mailchimp' ),
@@ -240,14 +254,20 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 								'type'        => 'select',
 								'description' => __( 'The default state of the opt-in checkbox.', 'ss_wc_mailchimp' ),
 								'default'     => 'checked',
-								'options'	=> array( 'checked' => __( 'Checked', 'ss_wc_mailchimp' ), 'unchecked' => __( 'Unchecked', 'ss_wc_mailchimp' ) )
+								'options'     => array(
+									'checked'    => __( 'Checked', 'ss_wc_mailchimp' ),
+									'unchecked'  => __( 'Unchecked', 'ss_wc_mailchimp' )
+								)
 							),
 				'opt_in_checkbox_display_location' => array(
 								'title'       => __( 'Opt-In Checkbox Display Location', 'ss_wc_mailchimp' ),
 								'type'        => 'select',
 								'description' => __( 'Where to display the opt-in checkbox on the checkout page (under Billing info or Order info).', 'ss_wc_mailchimp' ),
 								'default'     => 'billing',
-								'options'	=> array( 'billing' => __( 'Billing', 'ss_wc_mailchimp' ), 'order' => __( 'Order', 'ss_wc_mailchimp' ) )
+								'options'     => array(
+									'billing'    => __( 'Billing', 'ss_wc_mailchimp' ),
+									'order'      => __( 'Order', 'ss_wc_mailchimp' )
+								)
 							),
 			);
 
@@ -393,36 +413,39 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 	 * @return void
 	 */
 	public function subscribe( $order_id, $first_name, $last_name, $email, $listid = 'false' ) {
-
 		if ( ! $email )
 			return; // Email is required
 
 		if ( $listid == 'false' )
 			$listid = $this->list;
 
-		$api = new MCAPI( $this->api_key );
+		// Create MailChimp API instance
+		$api        = new MCAPI( $this->api_key );
 
 		$merge_vars = array( 'FNAME' => $first_name, 'LNAME' => $last_name );
 
-		if ( !empty( $this->interest_groupings ) && !empty( $this->groups ) ) {
+		if ( !empty( $this->interest_groupings ) && ! empty( $this->groups ) ) {
 			$merge_vars['GROUPINGS'] = array(
-					array('name' => $this->interest_groupings, 'groups' => $this->groups),
-				);
+				array(
+					'name'   => $this->interest_groupings,
+					'groups' => $this->groups
+				),
+			);
 		}
 
 		$vars = apply_filters( 'ss_wc_mailchimp_subscribe_merge_vars', $merge_vars, $order_id );
 
-		$email_type = 'html';
-		$double_optin = ( $this->double_optin == 'no' ? false : true );
-		$update_existing = true;
+		$email_type        = 'html';
+		$double_optin      = ( $this->double_optin == 'no' ? false : true );
+		$update_existing   = true;
 		$replace_interests = false;
-		$send_welcome = false;
+		$send_welcome      = false;
 
 		self::log( 'Calling MailChimp API listSubscribe method with the following: ' .
 			'listid=' . $listid .
 			', email=' . $email .
-			', vars=' . print_r( $vars, true ) . 
-			', email_type=' . $email_type . 
+			', vars=' . print_r( $vars, true ) .
+			', email_type=' . $email_type .
 			', double_optin=' . $double_optin .
 			', update_existing=' . $update_existing .
 			', replace_interests=' . $replace_interests .
@@ -443,15 +466,34 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 		}
 	}
 
+	public function subscribe_new_customer( $customer_id, $new_customer_data, $password_generated ) {
+		// Set customer data for subscription
+		$customer_data = array(
+			'order_id'   => false,
+			'first_name' => false,
+			'last_name'  => false,
+			'email'      => $new_customer_data['email'],
+			'listid'     => 'false'
+		);
+
+		// Allow hooking
+		$customer_data = apply_filters( 'ss_wc_mailchimp_new_customer_subscription_data', $customer_data, $customer_id, $new_customer_data );
+
+		extract( $customer_data );
+
+		// Subscribe customer
+		$this->subscribe( $order_id, $first_name, $last_name, $email, $listid );
+	}
+
 	/**
 	 * Admin Panel Options
 	 */
 	function admin_options() {
-    	?>
+		?>
 		<h3><?php _e( 'MailChimp', 'ss_wc_mailchimp' ); ?></h3>
-    	<p><?php _e( 'Enter your MailChimp settings below to control how WooCommerce integrates with your MailChimp lists.', 'ss_wc_mailchimp' ); ?></p>
-    		<table class="form-table">
-	    		<?php $this->generate_settings_html(); ?>
+		<p><?php _e( 'Enter your MailChimp settings below to control how WooCommerce integrates with your MailChimp lists.', 'ss_wc_mailchimp' ); ?></p>
+			<table class="form-table">
+				<?php $this->generate_settings_html(); ?>
 			</table><!--/.form-table-->
 		<?php
 	}
@@ -461,7 +503,7 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 	 *
 	 * @since 1.1
 	 */
-	function maybe_add_checkout_fields( $checkout_fields ) {
+	function add_checkout_fields( $checkout_fields ) {
 
 		$opt_in_checkbox_display_location = $this->opt_in_checkbox_display_location;
 
@@ -469,13 +511,11 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 			$opt_in_checkbox_display_location = 'billing';
 		}
 
-		if ( 'yes' == $this->display_opt_in ) {
-			$checkout_fields[$opt_in_checkbox_display_location]['ss_wc_mailchimp_opt_in'] = array(
-				'type'    => 'checkbox',
-				'label'   => esc_attr( $this->opt_in_label ),
-				'default' => ( $this->opt_in_checkbox_default_status == 'checked' ? 1 : 0 ),
-			);
-		}
+		$checkout_fields[$opt_in_checkbox_display_location]['ss_wc_mailchimp_opt_in'] = array(
+			'type'    => 'checkbox',
+			'label'   => esc_attr( $this->opt_in_label ),
+			'default' => ( $this->opt_in_checkbox_default_status == 'checked' ? 1 : 0 ),
+		);
 
 		return $checkout_fields;
 	}
@@ -486,7 +526,6 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 	 * @since 1.2.1
 	 */
 	function checkbox_default_status( $input ) {
-
 		return $this->opt_in_checkbox_default_status == 'checked' ? 1 : 0;
 	}
 
@@ -495,12 +534,9 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 	 *
 	 * @version 1.1
 	 */
-	function maybe_save_checkout_fields( $order_id ) {
-
-		if ( 'yes' == $this->display_opt_in ) {
-			$opt_in = isset( $_POST['ss_wc_mailchimp_opt_in'] ) ? 'yes' : 'no';
-			update_post_meta( $order_id, 'ss_wc_mailchimp_opt_in', $opt_in );
-		}
+	function save_checkout_fields( $order_id ) {
+		$opt_in = isset( $_POST['ss_wc_mailchimp_opt_in'] ) ? 'yes' : 'no';
+		update_post_meta( $order_id, 'ss_wc_mailchimp_opt_in', $opt_in );
 	}
 
 	/**

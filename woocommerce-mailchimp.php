@@ -8,7 +8,7 @@
  * Version: 1.3.2
  * Text Domain: ss_wc_mailchimp
  * Domain Path: languages
- * 
+ *
  * Copyright: © 2014 Adam Anderly
  * License: GNU General Public License v3.0
  * License URI: http://www.gnu.org/licenses/gpl-3.0.html
@@ -40,15 +40,15 @@ function woocommerce_mailchimp_init() {
 	include_once( 'classes/class-ss-wc-integration-mailchimp.php' );
 
 	/**
- 	* Add the Integration to WooCommerce
- 	**/
+	* Add the Integration to WooCommerce
+	**/
 	function add_mailchimp_integration($methods) {
-    	$methods[] = 'SS_WC_Integration_MailChimp';
+		$methods[] = 'SS_WC_Integration_MailChimp';
 		return $methods;
 	}
 
 	add_filter('woocommerce_integrations', 'add_mailchimp_integration' );
-	
+
 	function action_links( $links ) {
 
 		$plugin_links = array(
