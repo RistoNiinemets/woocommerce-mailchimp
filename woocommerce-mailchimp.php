@@ -5,7 +5,7 @@
  * Description: WooCommerce MailChimp provides simple MailChimp integration for WooCommerce.
  * Author: Adam Anderly
  * Author URI: http://anderly.com
- * Version: 1.3.6
+ * Version: 1.4
  * Text Domain: ss_wc_mailchimp
  * Domain Path: languages
  *
@@ -24,16 +24,8 @@ function woocommerce_mailchimp_init() {
 
 	load_plugin_textdomain( 'ss_wc_mailchimp', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 
-	global $woocommerce;
-
-	$settings_url = admin_url( 'admin.php?page=woocommerce_settings&tab=integration&section=mailchimp' );
-
-	if ( $woocommerce->version >= '2.1' ) {
-		$settings_url = admin_url( 'admin.php?page=wc-settings&tab=integration&section=mailchimp' );
-	}
-
 	if ( ! defined( 'WOOCOMMERCE_MAILCHIMP_SETTINGS_URL' ) ) {
-		define( 'WOOCOMMERCE_MAILCHIMP_SETTINGS_URL', $settings_url );
+		define( 'WOOCOMMERCE_MAILCHIMP_SETTINGS_URL', admin_url( 'admin.php?page=wc-settings&tab=integration&section=mailchimp' ) );
 	}
 
 	include_once( 'classes/class-ss-wc-integration-mailchimp.php' );
