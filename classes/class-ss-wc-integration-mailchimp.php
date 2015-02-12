@@ -23,8 +23,8 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 	 */
 	public function __construct() {
 
-		if ( ! class_exists( 'MCAPI' ) ) {
-			include_once( 'api/class-MCAPI.php' );
+		if ( ! class_exists( 'MailChimp' ) ) {
+			include_once dirname( __FILE__ ) . '/library/Mailchimp.php';
 		}
 
 		$this->id                 = 'mailchimp';
@@ -36,7 +36,7 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 
 		// We need the API key to set up for the lists in the form fields
 		$this->api_key   = $this->get_option( 'api_key' );
-		$this->mailchimp = new MCAPI( $this->api_key );
+		$this->mailchimp = new Mailchimp( $this->api_key );
 		$this->enabled   = $this->get_option( 'enabled' );
 
 		$this->init_form_fields();
@@ -310,7 +310,7 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 		if ( ! $mailchimp_lists ) {
 
 			$mailchimp_lists = array();
-			$retval          = $this->mailchimp->lists();
+			$retval          = $this->mailchimp->lists->getList();
 
 			if ( $this->mailchimp->errorCode ) {
 
@@ -357,8 +357,7 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 
 		$interest_groupings = array();
 		$interest_groups    = array();
-		$api                = new MCAPI( $this->api_key );
-		$retval             = $api->listInterestGroupings( $listid );
+		$retval             = $this->mailchimp->lists->interestGroupings( $listid );
 
 		if ( $mailchimp->errorCode ) {
 			echo $this->get_message( sprintf( __( 'Unable to load listInterestGroupings() from MailChimp: (%s) %s', 'ss_wc_mailchimp' ), $mailchimp->errorCode, $mailchimp->errorMessage ) );
@@ -408,7 +407,6 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 		if ( 'false' == $listid )
 			$listid = $this->list;
 
-		$api        = new MCAPI( $this->api_key );
 		$merge_vars = array(
 			'FNAME' => $first_name,
 			'LNAME' => $last_name
@@ -448,14 +446,14 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 		self::log( sprintf( __( 'Calling MailChimp API listSubscribe method with the following: %s', 'ss_wc_mailchimp' ), print_r( $options, true ) ) );
 
 		// Call API
-		$api_response      = $api->listSubscribe( $listid, $email, $vars, $email_type, $double_optin, $update_existing, $replace_interests, $send_welcome );
+		$api_response      = $this->mailchimp->lists->subscribe( $listid, $email, $vars, $email_type, $double_optin, $update_existing, $replace_interests, $send_welcome );
 
 		// Log api response
 		self::log( __( 'MailChimp API response: %s', $api_response ) );
 
-		if ( $api->errorCode && $api->errorCode != 214 ) {
+		if ( $this->mailchimp->errorCode && $this->mailchimp->errorCode != 214 ) {
 			// Format error message
-			$error_response = sprintf( __( 'WooCommerce MailChimp subscription failed: %s (%s)', 'ss_wc_mailchimp' ), $api->errorMessage, $api->errorCode );
+			$error_response = sprintf( __( 'WooCommerce MailChimp subscription failed: %s (%s)', 'ss_wc_mailchimp' ), $this->mailchimp->errorMessage, $this->mailchimp->errorCode );
 
 			// Log
 			self::log( $error_response );
