@@ -511,19 +511,6 @@ class SS_WC_Integration_MailChimp extends WC_Integration {
 	}
 
 	/**
-	 * Admin Panel Options
-	 */
-	function admin_options() {
-		?>
-		<h3><?php _e( 'MailChimp', 'ss_wc_mailchimp' ); ?></h3>
-		<p><?php _e( 'Enter your MailChimp settings below to control how WooCommerce integrates with your MailChimp lists.', 'ss_wc_mailchimp' ); ?></p>
-			<table class="form-table">
-				<?php $this->generate_settings_html(); ?>
-			</table><!--/.form-table-->
-		<?php
-	}
-
-	/**
 	 * Add the opt-in checkbox to the checkout fields (to be displayed on checkout).
 	 *
 	 * @since 1.1
